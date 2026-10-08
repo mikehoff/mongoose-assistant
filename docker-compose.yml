@@ -1,0 +1,75 @@
+# Pin a STABLE compose project name. Without this, Docker derives the project name from the containing
+# folder, so each download (mongoose, mongoose-2, mongoose-4, ...) becomes a SEPARATE
+# project with its own ntfy/searxng containers. Those duplicates then collide on the fixed host ports
+# (8090, 127.0.0.1:8888) and `docker compose up` fails with "port is already allocated". A fixed name
+# means every install reuses/replaces the same one set of containers instead of stacking new ones.
+name: mongoose
+
+services:
+  # OPTIONAL alternative to running Mongoose natively. This is NOT started by the installer (it lives
+  # behind the "api" profile, and bootstrap only brings up ntfy + searxng). The default, supported way
+  # to run Mongoose is the native `mongoose serve` process on the host. We intentionally bind the API
+  # container's 8765 to a DIFFERENT host port (8766) so that, even if someone runs `docker compose
+  # --profile api up` or a stale api container is left over from a previous attempt, it can NEVER
+  # occupy host port 8765 and block the native server (the exact collision that aborted first-run
+  # installs with "port 8765 is in use by a non-Mongoose process"). If you genuinely want the
+  # containerised API on 8765, change the mapping back deliberately and don't also run native serve.
+  mongoose-api:
+    build: .
+    profiles: ["api"]
+    env_file: .env
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      MONGOOSE_DB_PATH: /data/mongoose.sqlite3
+    ports:
+      - "8766:8765"
+    volumes:
+      - ./data:/data
+      - ./secrets:/app/secrets:ro
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    command: serve
+    ports:
+      - "8090:80"
+    environment:
+      NTFY_BASE_URL: http://127.0.0.1:8090
+    volumes:
+      - ./data/ntfy:/var/cache/ntfy
+      - ./configs/ntfy/server.yml:/etc/ntfy/server.yml:ro
+
+  # Local web search, shipped on by default and LOCAL-FIRST: SearXNG runs on this machine,
+  # so your search terms go out to search engines from YOUR box (via your own metasearch
+  # instance), not routed through anyone else's server. Bound to localhost only.
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "127.0.0.1:8888:8080"
+    environment:
+      SEARXNG_BASE_URL: http://127.0.0.1:8888/
+    volumes:
+      - ./configs/searxng:/etc/searxng:rw
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    profiles: ["ui"]
+    ports:
+      - "3000:8080"
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - open-webui:/app/backend/data
+
+  homeassistant-lab:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    profiles: ["ha-lab"]
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./data/homeassistant:/config
+    environment:
+      TZ: Europe/London
+
+volumes:
+  open-webui:

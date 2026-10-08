@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NOTE: for the SCHEDULER (not just the brief), prefer `mongoose service install`,
+     which generates a plist with correct absolute paths and KeepAlive. See docs/SERVICE.md.
+     This brief-only plist remains as a minimal example; edit the paths below to use it. -->
+<!-- launchd job: run the daily brief at 07:00 local, dropping it on the bus.
+     Install:
+       1. Edit the two paths below to your install location.
+       2. cp scripts/com.mongoose.brief.plist ~/Library/LaunchAgents/
+       3. launchctl load ~/Library/LaunchAgents/com.mongoose.brief.plist
+     Change the Hour/Minute for a different time. Remove with launchctl unload. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mongoose.brief</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/alex/Downloads/mongoose-newer/mongoose/scripts/brief_schedule.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>7</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/mongoose_brief.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/mongoose_brief.err</string>
+</dict>
+</plist>

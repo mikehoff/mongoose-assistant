@@ -1,0 +1,10 @@
+{
+  "domain": "mongoose_bus",
+  "name": "Mongoose Bus",
+  "version": "0.1.0",
+  "documentation": "https://localhost/docs/MCP_SETUP.md",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "local_polling"
+}

@@ -1,0 +1,10 @@
+{
+  "domain": "mongoose_conversation",
+  "name": "Mongoose Conversation",
+  "version": "0.1.0",
+  "documentation": "https://localhost/docs/MCP_SETUP.md",
+  "dependencies": ["conversation"],
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "local_polling"
+}

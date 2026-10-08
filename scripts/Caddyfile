@@ -1,0 +1,27 @@
+# Caddyfile for Mongoose, the OPTIONAL reverse-proxy path to HTTPS.
+#
+# Use this instead of built-in --tls if you'd rather Caddy manage certs automatically.
+# Caddy issues and renews a local cert and trusts it in the system store, so you get
+# https with even less cert wrangling than mkcert (still install Caddy's local CA on
+# phones/tablets once, see `caddy trust` and docs/HTTPS.md).
+#
+# Run:
+#   caddy run --config scripts/Caddyfile
+# Then point devices at https://<this-mac-ip> (port 443) or the address below.
+#
+# Mongoose itself stays on plain http on localhost; Caddy terminates TLS and proxies.
+
+{
+	# local CA, no public ACME, this is a home LAN
+	local_certs
+}
+
+# Serve https on the LAN. Replace the address with your Mac's hostname/IP if you like;
+# `https://` with a bare host makes Caddy use its local CA.
+https://mongoose.local, https://localhost {
+	reverse_proxy 127.0.0.1:8765
+
+	# Mongoose's own auth (token/cookie + cockpit nonce) still applies behind the
+	# proxy. Pass through the real client IP so the login throttle sees per-device IPs.
+	header_up X-Forwarded-For {remote_host}
+}

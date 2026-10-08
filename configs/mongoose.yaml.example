@@ -1,0 +1,47 @@
+locations:
+  home:
+    latitude: 51.5074
+    longitude: -0.1278
+    timezone: Europe/London
+
+surfaces:
+  pixel_watch:
+    privacy_max: medium
+    speak: false
+  mac_dashboard:
+    privacy_max: high
+    speak: false
+  bathroom_ipad:
+    privacy_max: low
+    speak: true
+  alexa_echo:
+    privacy_max: low
+    speak: true
+
+weather:
+  phrase_rotation:
+    avoid_repeat_hours: 36
+  minutely_precision_requires_provider: true
+
+home_control:
+  default_primary_route: home_assistant
+  default_fallback_route: alexa
+  alexa_private_content_allowed: false
+
+llm:
+  runtime: ollama
+  # Exact pinned tags for a 24 GB base M4. Gemma is kept RESIDENT for both chat
+  # and tools (OLLAMA_KEEP_ALIVE=-1 keeps it loaded); on this hardware it beat
+  # gpt-oss on tool-JSON reliability and avoided swap, so it serves both roles.
+  # gpt-oss:20b is an OPTIONAL override, not the default. Measurement-led on the
+  # real Mac mini, not assumed.
+  # NOTE: this YAML is documentation only; the running config is read from
+  # environment variables (see .env.example). Keep the two in sync.
+  models:
+    chat: gemma4:26b-a4b-it-q4_K_M           # persona/default voice, resident
+    tool: gemma4:26b-a4b-it-q4_K_M           # tool routing, same resident model
+    code: qwen2.5-coder:14b-instruct-q4_K_M  # coding, loaded on demand
+    # tool_override: gpt-oss:20b             # optional; failed tool-JSON + added swap here
+  keep_alive: "-1"
+  # MLX is the speed lever on a bandwidth-limited base M4 but Ollama's MLX
+  # backend needs >32GB; on 24GB use MLX-LM/LM Studio directly if desired.

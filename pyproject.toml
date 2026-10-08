@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mongoose-assistant"
+version = "1.53.361"
+description = "Mongoose: a local-first household assistant (chat, Cockpit, home, devices, voice). Builds on mongoose-core."
+requires-python = ">=3.12"
+dependencies = [
+  # The RTM, search, document and WordPress layer, released in lockstep at the same version.
+  "mongoose-core==1.53.361",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "httpx>=0.27",
+  "pydantic>=2.8",
+  "python-dotenv>=1.0",
+  "PyYAML>=6.0",
+  "cryptography>=42.0",
+  "psutil>=5.9",
+  "pynacl>=1.5",
+  # RTM receipts and combined receipt/demand PDFs (rtm_trust.py). These are money/evidence
+  # paths, not decoration: a fresh install without them crashes receipt rendering, which is
+  # exactly what the external audit hit. Declared here AND in requirements.txt.
+  "reportlab>=4",
+  "pypdf>=4",
+]
+
+[project.scripts]
+mongoose = "mongoose.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8.2", "pytest-asyncio>=0.23", "pytest-timeout>=2.3", "pyflakes>=3.0"]
+# Device pairing niceties: QR-code rendering for the cockpit and mDNS/NSD advertisement
+# for phone discovery. SOFT: pairing works without these (type the address; the QR falls
+# back to a URL), so they're optional, not core.
+devices = ["qrcode>=7.4", "zeroconf>=0.130"]
+# Content extraction for search: PDF text (pypdfium2, Apache/BSD not AGPL) and .docx. SOFT:
+# search degrades to filename-only indexing without them, but they are load-bearing for real
+# use (RTM bundles are PDFs), so requirements.txt installs them on every fresh install.
+content = ["pypdfium2>=4.0", "python-docx>=1.0"]
+# RTM branded document generation (Jinja-in-Word). SOFT: cover emails render without it; only the
+# branded .docx needs docxtpl. PDF export additionally needs LibreOffice (soffice) on the machine.
+rtm_docs = ["docxtpl>=0.16", "jinja2>=3.0"]
+# Multilingual sentence embeddings (optional): cross-language same-gist detection for the
+# rule-engagement layer and future semantic search. CPU ONNX, no torch. The model itself is
+# downloaded explicitly by the owner (see services/embeddings.py docstring), never fetched
+# automatically.
+embeddings = ["onnxruntime>=1.17", "tokenizers>=0.15", "numpy>=1.26"]
+connectors = [
+  "google-auth>=2.29",
+  "google-auth-oauthlib>=1.2",
+  "google-api-python-client>=2.130",
+  "msal>=1.28",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# Shares the `mongoose` import namespace with mongoose-core, which owns the package __init__ files.
+namespaces = true
+
+[tool.setuptools.package-data]
+# bundled woff2 fonts for the Cockpit (local-first: no font CDN). Ship with the package.
+# The RTM branded template pack (docx + cover emails + logo) ships too, so document generation works
+# from a fresh install with no external assets.
+"mongoose" = ["static/fonts/*.woff2", "static/img/*.png", "assets/fortune/*.swift", "assets/fortune/*.ttf",
+              "assets/fortune/*.otf"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# Defensive backstop against a hung gate (the QA audit's P0.1 failure mode): cap each test
+# at 60s. No legitimate test here runs longer than ~0.5s, so this only ever trips on a real
+# hang , and when it does, it fails THAT test with a traceback pointing at the culprit,
+# instead of silently hanging the whole monolithic suite. Uses the thread method so it works
+# regardless of signal handling. Requires pytest-timeout (in the 'test' extra); if absent,
+# pytest ignores these keys and the suite still runs (just without the backstop).
+timeout = 60
+timeout_method = "thread"
+markers = [
+  "connectors: tests that exercise Gmail/Microsoft connector code; need the 'connectors' extra installed (run via scripts/qa_connectors.sh)",
+  "slow: tests that are slow or perform heavy/networked side effects; excluded from the default release gate",
+]

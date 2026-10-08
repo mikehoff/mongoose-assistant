@@ -1,0 +1,4 @@
+base-url: "http://127.0.0.1:8090"
+cache-file: "/var/cache/ntfy/cache.db"
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+behind-proxy: false

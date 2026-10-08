@@ -1,0 +1,27 @@
+# Mongoose-shipped SearXNG config. Local-first web search: this runs on your machine, so
+# search terms go out to search engines from YOUR box, not through anyone else's server.
+#
+# The one setting Mongoose REQUIRES is the json output format, the search client queries
+# GET /search?format=json, and SearXNG returns 403 for an unset/disallowed format. So
+# 'json' must be in search.formats or web search silently fails.
+use_default_settings: true
+
+server:
+  # A secret is required by SearXNG. This default is fine for a localhost-only instance
+  # bound to 127.0.0.1; regenerate it (scripts/bootstrap_macos.sh does) if you expose it.
+  secret_key: "mongoose-local-searxng-change-me"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: true
+
+search:
+  # CRITICAL: json is what the Mongoose client uses. Without it, search returns 403.
+  formats:
+    - html
+    - json
+  safe_search: 1
+  autocomplete: ""
+
+ui:
+  static_use_hash: true

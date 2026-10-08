@@ -1,0 +1,43 @@
+core:
+  description: The brain, API, CLI, and local store. Always required.
+  pip: [fastapi, uvicorn, pydantic, httpx]
+  always: true
+
+documents:
+  description: Search INSIDE PDFs and Word docs (content extraction), not just by name.
+  pip: [pypdfium2, python-docx]
+  enables: PDF and Word attachment/file content search
+
+google:
+  description: Gmail (mail + attachments), Google Calendar, and Tasks.
+  pip: [google-api-python-client, google-auth, google-auth-oauthlib]
+  env_any: [GOOGLE_CLIENT_SECRETS_PATH, GOOGLE_TOKEN_PATH]
+  enables: Gmail attachment indexing, Calendar and Tasks sync
+
+microsoft:
+  description: Outlook / Microsoft 365 mail (with attachments), Calendar, and To Do.
+  pip: [msal]
+  env_any: [MS_CLIENT_ID]
+  enables: Outlook attachment indexing, Microsoft Calendar and To Do sync
+
+voice:
+  description: Voice input (speech to text). Output (say) works without these.
+  commands: [ffmpeg]
+  pip: [openai-whisper]
+  enables: voice input sessions
+
+qa:
+  description: Run the test suite and linter (developers only).
+  pip: [pytest, pytest-asyncio, pytest-timeout, pyflakes]
+  enables: scripts/qa_repo.sh and scripts/qa_connectors.sh
+
+whatsapp:
+  description: Bidirectional WhatsApp via a local WAHA Docker sidecar (REST + webhooks).
+  commands: [docker]
+  env_any: [WAHA_URL, WHATSAPP_PROVIDER]
+  enables: WhatsApp message indexing, search, and approval-gated drafts
+
+rtm_portal:
+  description: RTM leaseholder portal claim encryption (NaCl sealed box, PyNaCl).
+  pip: [pynacl]
+  enables: portal claim decryption, keypair generation, encrypted claim processing

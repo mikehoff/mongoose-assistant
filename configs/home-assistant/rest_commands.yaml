@@ -1,0 +1,13 @@
+# Example Home Assistant REST commands to call Mongoose.
+# Add these manually to your HA configuration if useful.
+
+mongoose_weather_voice_summary:
+  url: "http://127.0.0.1:8765/weather/voice-summary"
+  method: GET
+
+mongoose_ingest_notification:
+  url: "http://127.0.0.1:8765/notifications/ingest"
+  method: POST
+  content_type: "application/json"
+  payload: >
+    {"source":"home_assistant","app":"{{ app }}","title":"{{ title }}","body":"{{ body }}","privacy":"{{ privacy }}","urgency":"{{ urgency }}"}

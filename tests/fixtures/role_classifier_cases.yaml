@@ -1,0 +1,47 @@
+# Role classifier regression corpus. Each case: an utterance and the role it should
+# route to. Precision on 'tool' and 'code' must stay high (don't misfire actions or
+# the code model); 'chat' is the safe default. Add real-ish phrasings here over time.
+
+# --- home / device control -> tool ---
+- {text: "turn off the lights", expected: tool}
+- {text: "close the blinds", expected: tool}
+- {text: "make it warmer", expected: tool}
+- {text: "dim the lounge", expected: tool}
+- {text: "switch on the kettle", expected: tool}
+- {text: "set the thermostat to 20", expected: tool}
+
+# --- reminders / calendar / scheduling -> tool ---
+- {text: "remind me to call the agent at 3pm", expected: tool}
+- {text: "what's on tomorrow", expected: tool}
+- {text: "am i free on friday", expected: tool}
+- {text: "set a timer for 10 minutes", expected: tool}
+
+# --- file / email finding -> tool ---
+- {text: "find the invoice from ScottishPower", expected: tool}
+- {text: "find my insurance certificate", expected: tool}
+- {text: "where's the tribunal bundle", expected: tool}
+- {text: "do I have a receipt for the yoga", expected: tool}
+- {text: "pull up my bank statement", expected: tool}
+- {text: "search for invoices from last month", expected: tool}
+- {text: "find the email from Lawfirm", expected: tool}
+- {text: "where did I save that contract", expected: tool}
+
+# --- code -> code ---
+- {text: "write a python script to parse CSV", expected: code}
+- {text: "write a function to parse a date", expected: code}
+- {text: "fix this regex for me", expected: code}
+- {text: "def foo(): return 1", expected: code}
+
+# --- chat (must NOT misfire) -> chat ---
+- {text: "what does close reading mean", expected: chat}
+- {text: "what is the function of the spleen", expected: chat}
+- {text: "what is the function of the kidney", expected: chat}
+- {text: "find peace in difficult times", expected: chat}
+- {text: "where is France on the map", expected: chat}
+- {text: "how do I find the area of a circle", expected: chat}
+- {text: "I need to find myself", expected: chat}
+- {text: "what is a certificate of deposit", expected: chat}
+- {text: "tell me about email security", expected: chat}
+- {text: "the report says inflation is rising", expected: chat}
+- {text: "explain how photosynthesis works", expected: chat}
+- {text: "what's a good book on stoicism", expected: chat}

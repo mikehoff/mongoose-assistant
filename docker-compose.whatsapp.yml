@@ -1,0 +1,44 @@
+# WhatsApp via WAHA, a local self-hosted WhatsApp HTTP API sidecar.
+#
+# Start it with:  docker compose -f docker-compose.whatsapp.yml up -d
+# Then link your phone by scanning the QR at http://127.0.0.1:3000 .
+#
+# Mongoose speaks only HTTP to WAHA. The WhatsApp Web session lives entirely inside
+# the container; sessions persist in ./data/waha/sessions. Inbound messages are
+# delivered to Mongoose's webhook, which is HMAC-verified (set WHATSAPP_HOOK_HMAC_KEY
+# in your .env; `mongoose setup --capability whatsapp` can generate one).
+#
+# Bound to 127.0.0.1 only: WAHA is never exposed beyond this machine.
+
+services:
+  waha:
+    image: devlikeapro/waha
+    # WAHA ships an amd64-only image; on Apple Silicon (arm64) the pull fails with
+    # "no matching manifest for linux/arm64". Run it under Docker Desktop's amd64 emulation.
+    platform: linux/amd64
+    container_name: mongoose-waha
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data/waha/sessions:/app/.sessions
+    environment:
+      # WAHA rejects every /api call with 401 unless this key is presented as X-Api-Key.
+      # Mongoose reads the same value from ~/.mongoose/.env (WAHA_API_KEY) and sends it on
+      # every request. Pinning it here keeps container and client in agreement across recreates.
+      WAHA_API_KEY: "${WAHA_API_KEY:-73d3620624f3466e8e912b66c96c9b2f}"
+      # NOWEB is WAHA's browserless engine. The default WEBJS engine launches a headless
+      # Chromium via Puppeteer, which cannot boot under amd64 emulation on Apple Silicon
+      # (it dies with 'Timed out waiting for the WS endpoint URL'), so the session loops
+      # STARTING -> FAILED and no QR ever renders. NOWEB talks the protocol directly, needs
+      # no browser, is far lighter under emulation, and produces the QR in seconds.
+      WHATSAPP_DEFAULT_ENGINE: "NOWEB"
+      # host.docker.internal lets the container reach Mongoose running on the host.
+      # Mongoose is HTTPS-only on 8765: a plain-http webhook post is refused (empty reply /
+      # 'socket hang up' in WAHA logs), so inbound messages never arrive. Post over https and
+      # accept Mongoose's self-signed loopback cert (NODE_TLS_REJECT_UNAUTHORIZED=0).
+      WHATSAPP_HOOK_URL: "https://host.docker.internal:8765/whatsapp/webhook/waha"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # Specific events only. Do NOT use '*': it generates a flood of requests.
+      WHATSAPP_HOOK_EVENTS: "message,message.any,session.status"
+      WHATSAPP_HOOK_HMAC_KEY: "${WHATSAPP_HOOK_HMAC_KEY}"
