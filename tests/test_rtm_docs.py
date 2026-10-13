@@ -53,7 +53,7 @@ def test_list_get_and_context_summary(env):
     ctx = rd.context_summary()
     assert ctx["documents"] == 2 and ctx["by_type"].get("invoice") == 1
     assert set(rd.DOC_TYPES) == {"receipt", "invoice", "contract", "ticket", "feedback",
-                                 "complaint", "photo_evidence", "other_evidence"}
+                                 "complaint", "photo_evidence", "other_evidence", "export"}
 
 
 def test_correlation_runs_and_is_empty_without_calls_or_emails(env):
@@ -184,3 +184,31 @@ def test_upload_endpoint_ingests_base64(env, monkeypatch):
     assert r["ok"] and r["doc_type"] == "contract"
     listing = c.get("/cockpit/rtm/documents").json()
     assert listing["ok"] and any(d["filename"] == "contract.txt" for d in listing["documents"])
+
+
+def test_director_surname_does_not_tie_documents_to_the_directors_flat(env):
+    """The RTM director's name is on almost every RTM business document (the customer on supplier invoices,
+    the signatory on letters), so finding it says nothing about the flat the director happens to own. Seen
+    live: 29 supplier invoices, receipts and certificates were all tied to the director's flat and its
+    demands because the director's surname is that flat's payment reference. Other leaseholders' references
+    and explicit flat ids must still link."""
+    rd = env
+    from mongoose.services import rtm_management as M
+    from mongoose.services.rtm_example_court import company_profile
+    director = company_profile()["director"]
+    surname = director.split()[-1].upper()
+    M.seed_flats()
+    M.upsert_flat(block="1EC", flat_number=1, leaseholder_name=director, payment_reference=surname)
+    M.upsert_flat(block="3EC", flat_number=2, leaseholder_name="A Leaseholder", payment_reference="QUENTINA")
+
+    def flats_of(doc_id):
+        return {l["ref"] for l in rd.get_document(doc_id)["related"] if l["kind"] in ("flat", "demand")}
+
+    r = rd.ingest(content=f"Order details. Delivery address: {director}, Flat 1. Order total 37.98".encode(),
+                  filename="order.txt", doc_type="receipt")
+    assert flats_of(r["id"]) == set(), "the director's own name must not tie an RTM receipt to their flat"
+    r = rd.ingest(content=b"Bank transfer, reference QUENTINA, 120.00", filename="proof.txt", doc_type="receipt")
+    assert "3ECF2" in flats_of(r["id"]), "a leaseholder's payment reference still identifies their flat"
+    r = rd.ingest(content=f"Leaseholder letter from {director} about flat 1ECF1".encode(), filename="l.txt",
+                  doc_type="other_evidence")
+    assert "1ECF1" in flats_of(r["id"]), "the director's flat named explicitly still links"

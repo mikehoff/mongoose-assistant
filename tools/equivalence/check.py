@@ -40,7 +40,10 @@ def snapshot(brain: Path, dest: Path) -> None:
     src = sqlite3.connect(f"file:{brain}?mode=ro", uri=True, timeout=30)
     dst = sqlite3.connect(str(dest))
     try:
-        src.backup(dst, pages=4096)
+        # One step, inside one read transaction. A paged backup restarts from scratch whenever the live
+        # server writes to the brain between pages, so on a busy install it never finished (it spun for
+        # 43 hours at 100% CPU on 2026-10-12 and blocked the release sync).
+        src.backup(dst)
     finally:
         dst.close()
         src.close()
