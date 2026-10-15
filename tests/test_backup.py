@@ -91,13 +91,13 @@ def test_rota_keeps_grandfather_father_son():
         p.write_bytes(b"x")
         made.append(p)
     res = B.apply_rota(now=now)
-    # should keep far fewer than 60 (7 daily + a few weekly + a few monthly), and delete the rest
+    # should keep far fewer than 60 (5 daily + a few weekly + a few monthly), and delete the rest
     assert res["kept"] < 60
     assert res["deleted"] > 0
     remaining = list(root.glob("mongoose-backup-*.tar.gz"))
     assert len(remaining) == res["kept"]
-    # the newest 7 days must all be kept
-    for i in range(7):
+    # the newest ROTA_DAILY days must all be kept
+    for i in range(B.ROTA_DAILY):
         dt = now - timedelta(days=i)
         assert (root / f"mongoose-backup-daily-{dt.strftime('%Y%m%dT%H%M%S')}.tar.gz").exists()
 

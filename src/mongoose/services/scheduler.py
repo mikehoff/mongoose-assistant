@@ -814,7 +814,7 @@ async def _job_brain_snapshot() -> dict[str, Any]:
         from ..brain_preservation import snapshot_brain, prune_snapshots
         snap = await asyncio.to_thread(snapshot_brain, "daily")
         out["snapshot"] = {"ok": snap.get("ok"), "dir": snap.get("snapshot_dir")}
-        out["prune"] = await asyncio.to_thread(prune_snapshots, 7)   # 7 SPREAD across days/weeks/months
+        out["prune"] = await asyncio.to_thread(prune_snapshots, 5)   # 5 SPREAD: 2 daily, 1 weekly, 2 monthly (+ newest preupdate, oldest)
         return out
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}

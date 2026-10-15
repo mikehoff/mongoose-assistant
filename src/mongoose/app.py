@@ -358,6 +358,12 @@ _PUBLIC_PREFIXES = (
     "/device/manifest.webmanifest",
     "/sw.js",
     "/share-target",
+    # Home Assistant camera feed (read-only latest frame + live HLS). Allowlisted ONLY because every
+    # /cctv/ha/* route self-validates MONGOOSE_CCTV_HA_TOKEN (constant-time), answers 404 when no
+    # token is configured, and refuses any client that is not loopback or a private LAN address, so
+    # it is not reachable over the public tunnel. GET only, serves files, never mutates. The owner
+    # CCTV page and its other APIs are NOT under this prefix and stay behind the normal owner gate.
+    "/cctv/ha",
 )
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
@@ -10047,3 +10053,188 @@ async def assist(req: AssistRequest, http_request: Request) -> dict:
 async def brief(post: bool = False) -> dict:
     from .services.brief import generate_brief
     return await generate_brief(post_to_bus=post)
+
+
+# ---- CCTV (car-park camera): owner-only viewer + a token-protected Home Assistant feed ----
+# Owner gate: every /cctv route except /cctv/ha/* already passes _guard_sensitive_routes (loopback,
+# owner session cookie, master API token, or a primary_phone device token; a guest device token is
+# refused because /cctv is not in _GUEST_DEVICE_ROUTES). _cctv_owner_ok adds the in-route check that
+# also refuses a session cookie belonging to a GUEST account (the middleware accepts any valid
+# session cookie), so camera footage is never reachable by a guest by any route.
+
+def _cctv_owner_ok(request: Request) -> bool:
+    dtok = request.headers.get("x-mongoose-device-token", "")
+    if dtok:
+        from .devices import device_for_token
+        dev = device_for_token(dtok)
+        return dev is not None and str(dev.get("profile") or "") == "primary_phone"
+    client_host = request.client.host if request.client else ""
+    settings = get_settings()
+    if client_host in _LOOPBACK_HOSTS and not bool(getattr(settings, "lock_local", False)):
+        return True
+    try:
+        supplied = request.headers.get("x-cockpit-nonce", "")
+        if supplied and _secrets.compare_digest(supplied, _COCKPIT_NONCE):
+            return True
+        token = getattr(settings, "api_token", "") or ""
+        supplied = request.headers.get("x-mongoose-token", "")
+        if token and supplied and _secrets.compare_digest(supplied, token):
+            return True
+    except Exception:
+        pass
+    try:
+        from .session_auth import session_user, SESSION_COOKIE
+        uid = session_user(request.cookies.get(SESSION_COOKIE))
+        if uid is False:
+            return False
+        if uid == "":
+            return True  # bearer session minted by /login from the master token
+        from .services.auth_accounts import is_owner_account
+        return is_owner_account(str(uid))
+    except Exception:
+        return False
+
+
+def _cctv_deny() -> JSONResponse:
+    return JSONResponse(status_code=403, content={"ok": False, "error": "owner only"})
+
+
+_CCTV_NOCACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+
+
+def _cctv_file(kind: str, name: str, *, download: bool = False, nocache: bool = False):
+    from fastapi.responses import FileResponse
+    from .services import cctv
+    path = cctv.resolve(kind, name)
+    if path is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not found"})
+    media = {"mp4": "video/mp4", "jpg": "image/jpeg", "m4s": "video/iso.segment",
+             "m3u8": "application/vnd.apple.mpegurl"}.get(path.suffix.lstrip("."), "application/octet-stream")
+    headers = dict(_CCTV_NOCACHE) if nocache else {"Cache-Control": "private, max-age=60"}
+    if download:
+        return FileResponse(path, media_type=media, filename=path.name, headers=headers)
+    return FileResponse(path, media_type=media, headers=headers)
+
+
+@app.get("/cctv", response_class=HTMLResponse)
+def cctv_page(request: Request):
+    if not _cctv_owner_ok(request):
+        return HTMLResponse(status_code=403, content="<!doctype html><meta charset=utf-8>"
+                            "<title>CCTV</title><p>This page is just for the owner.</p>")
+    from .cctv_page import cctv_html
+    return HTMLResponse(cctv_html(), headers=dict(_CCTV_NOCACHE))
+
+
+@app.get("/cctv/app.js")
+def cctv_js(request: Request):
+    if not _cctv_owner_ok(request):
+        return _cctv_deny()
+    from .cctv_page import CCTV_JS
+    return Response(CCTV_JS, media_type="application/javascript", headers=dict(_CCTV_NOCACHE))
+
+
+@app.get("/cctv/api/days")
+def cctv_api_days(request: Request):
+    if not _cctv_owner_ok(request):
+        return _cctv_deny()
+    from .services import cctv
+    info = cctv.list_days_info()
+    return JSONResponse({"ok": True, "days": [d["day"] for d in info], "day_info": info,
+                         "status": cctv.status()}, headers=dict(_CCTV_NOCACHE))
+
+
+@app.get("/cctv/api/day/{day}")
+def cctv_api_day(day: str, request: Request):
+    if not _cctv_owner_ok(request):
+        return _cctv_deny()
+    from .services import cctv
+    if not cctv._RE_DAY.match(day):
+        return JSONResponse(status_code=400, content={"ok": False, "error": "day must be YYYYMMDD"})
+    return JSONResponse({"ok": True, "day": day, "events": cctv.list_events(day),
+                         "continuous": cctv.list_continuous(day), "older": cctv.list_older(day)},
+                        headers=dict(_CCTV_NOCACHE))
+
+
+@app.get("/cctv/file/{kind}/{name}")
+def cctv_api_file(kind: str, name: str, request: Request, download: int = 0, thumb: int = 0):
+    if not _cctv_owner_ok(request):
+        return _cctv_deny()
+    if kind not in ("continuous", "event", "still", "older"):
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not found"})
+    if thumb and kind == "still" and not download:
+        from .services import cctv
+        path = cctv.resolve(kind, name)
+        if path is None:
+            return JSONResponse(status_code=404, content={"ok": False, "error": "not found"})
+        data = cctv.thumbnail(path)
+        if data is not None:
+            return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+    return _cctv_file(kind, name, download=bool(download), nocache=(kind == "continuous"))
+
+
+@app.get("/cctv/live/{name}")
+def cctv_live(name: str, request: Request):
+    if not _cctv_owner_ok(request):
+        return _cctv_deny()
+    return _cctv_file("live", name, nocache=True)
+
+
+def _cctv_ha_ok(request: Request, token: str) -> "JSONResponse | None":
+    """None when the HA feed request is allowed, else the refusal. 404 when no token is set."""
+    import ipaddress
+    import os as _os
+    expected = _os.environ.get("MONGOOSE_CCTV_HA_TOKEN", "").strip()
+    if not expected:
+        try:
+            from .setup_wizard import effective_env
+            expected = str(effective_env().get("MONGOOSE_CCTV_HA_TOKEN") or "").strip()
+        except Exception:
+            expected = ""
+    if not expected:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not found"})
+    # LAN only: never over the public tunnel (cloudflared marks its requests with cf-* headers).
+    if request.headers.get("cf-connecting-ip") or request.headers.get("cf-ray"):
+        return JSONResponse(status_code=403, content={"ok": False, "error": "lan only"})
+    host = request.client.host if request.client else ""
+    if host not in _LOOPBACK_HOSTS:
+        try:
+            ip = ipaddress.ip_address(host)
+            if not (ip.is_private or ip.is_loopback) or ip.is_unspecified:
+                return JSONResponse(status_code=403, content={"ok": False, "error": "lan only"})
+        except ValueError:
+            return JSONResponse(status_code=403, content={"ok": False, "error": "lan only"})
+    supplied = token or request.headers.get("x-cctv-token", "")
+    if not supplied or not _secrets.compare_digest(supplied.encode(), expected.encode()):
+        return JSONResponse(status_code=403, content={"ok": False, "error": "bad token"})
+    return None
+
+
+@app.get("/cctv/ha/still.jpg")
+def cctv_ha_still(request: Request, token: str = ""):
+    bad = _cctv_ha_ok(request, token)
+    if bad is not None:
+        return bad
+    return _cctv_file("live", "latest.jpg", nocache=True)
+
+
+@app.get("/cctv/ha/live.m3u8")
+def cctv_ha_playlist(request: Request, token: str = ""):
+    bad = _cctv_ha_ok(request, token)
+    if bad is not None:
+        return bad
+    from urllib.parse import urlencode
+    from .services import cctv
+    text = cctv.live_playlist(urlencode({"token": token}) if token else "")
+    if text is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "live feed not running"})
+    return Response(text, media_type="application/vnd.apple.mpegurl", headers=dict(_CCTV_NOCACHE))
+
+
+@app.get("/cctv/ha/{name}")
+def cctv_ha_part(name: str, request: Request, token: str = ""):
+    bad = _cctv_ha_ok(request, token)
+    if bad is not None:
+        return bad
+    if name == "live.m3u8" or name == "latest.jpg":
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not found"})
+    return _cctv_file("live", name, nocache=True)

@@ -2063,7 +2063,7 @@ async function loadSetup(){
       <div class="muted" style="margin-bottom:10px">Optional. Mongoose can push alerts to your phone. This uses a local push service (ntfy). It can run in Docker, or natively without Docker.</div>
       <div id="pushbox" class="muted">checking push setup...</div></div>`;
     html+=`<div class="card"><h2>Backups</h2>
-      <div class="muted" style="margin-bottom:10px">Mongoose backs up your brain + config every day, keeping the newest 7 daily, 4 weekly, and 12 monthly copies (grandfather-father-son). Connect Google Drive to keep copies safely off this Mac too.</div>
+      <div class="muted" style="margin-bottom:10px">Mongoose backs up your brain + config every day, keeping the newest 5 daily, 3 weekly, and 6 monthly copies on this Mac (grandfather-father-son). Connect Google Drive to keep a longer history safely off this Mac too.</div>
       <div id="backupBox" class="muted">checking backups...</div></div>`;
     html+=`<div class="card"><h2>Brain snapshots</h2>
       <div class="muted" style="margin-bottom:10px">Daily local restore points of your brain, taken automatically. They're safe but add up (roughly 0.8 GB each). This shows how much disk they use and lets you prune the oldest, no terminal needed.</div>
@@ -3642,6 +3642,7 @@ async function loadRTM(){
       <div class="big">Director dashboard</div>
       <div class="muted">Demand register, Metro reconciliation, arrears, payables, budget actuals and evidence. Review-only: Mongoose does not send demands or move money.</div>
       <button class="act go" style="margin-top:10px" onclick="exportRTMPack()">Export management pack</button>
+      <button class="act" style="margin-top:10px" onclick="location.href='/cctv'">CCTV: car park camera</button>
       <span id="rtmExportOut" class="muted" style="margin-left:8px"></span></div>
       <div class="card" id="rtm-seller-pack"><h2>Seller pack (LPE1)</h2>
         <div class="muted">Generate the first-stage reply to an LPE1 request: the branded cover letter plus the statutory administration-charge summary, ready to print or attach. Artifacts only. Mongoose sends nothing and does not release the completed form until the fee is paid.</div>
@@ -9495,6 +9496,13 @@ async function rtmVoicemailPlay(id,btn){
   catch(e){ btn.textContent='Download failed'; setTimeout(function(){btn.innerHTML=o;btn.disabled=false;},2000); }
 }
 var _rtmLoadedAt=0;
+async function openCctv(){
+  // The CCTV page is a normal owner page, so the browser needs the owner session cookie (a page load
+  // cannot carry the device token header). The owner-identity call sets it from this device's token.
+  try{ await fetch('/account/owner-identity',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json','X-Mongoose-Device-Token':token()}}); }catch(e){}
+  location.href='/cctv?from=phone';
+}
 async function loadRtm(){
   // Coalesce a double-open: the RTM view was being loaded twice in quick succession (tile click + a hash/
   // nonce-driven re-nav), rebuilding the whole subtab bar and flashing. If we just built it moments ago,
@@ -9504,7 +9512,7 @@ async function loadRtm(){
   _rtmLoadedAt=_now;
   var root=document.getElementById('rtm-root');
   var tabs=[['dashboard','Overview'],['mail','Mail'],['voicemail','Voicemail'],['arrears','Arrears'],['demands','Demands'],['payables','Payables'],['flats','Flats'],['docs','Docs'],['receipts','Receipts'],['ops','Ops']];
-  root.innerHTML='<div id="rtm-sync-strip"></div><div class="subtabs">'+tabs.map(function(t){return '<button class="subtab'+(t[0]===_rtmTab?' on':'')+'" data-tab="'+t[0]+'" onclick="rtmTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div><div id="rtm-content"><div class="muted">Loading&hellip;</div></div>';
+  root.innerHTML='<div id="rtm-sync-strip"></div><div style="margin:0 0 8px"><button class="subtab" onclick="openCctv()">CCTV: car park camera</button></div><div class="subtabs">'+tabs.map(function(t){return '<button class="subtab'+(t[0]===_rtmTab?' on':'')+'" data-tab="'+t[0]+'" onclick="rtmTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div><div id="rtm-content"><div class="muted">Loading&hellip;</div></div>';
   loadRtmSyncStrip();
   rtmRender();
 }

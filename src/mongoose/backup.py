@@ -15,7 +15,7 @@ regenerated is:
 A backup archive is a .tar.gz containing those plus a manifest.json (version, timestamp, what's
 inside, integrity hashes). Restoring unpacks them back into place, brain and config return together.
 
-This module also keeps a LOCAL backup rota (grandfather-father-son: 7 daily + 4 weekly + 12 monthly) so
+This module also keeps a LOCAL backup rota (grandfather-father-son: 5 daily + 3 weekly + 6 monthly) so
 there is always a sensible local history even before/without Google Drive. The Drive integration
 (backup_drive.py) uploads these same archives off-machine with the same rota.
 
@@ -266,10 +266,16 @@ def restore_backup(archive_path: str | Path, *, restore_config: bool = True) -> 
         shutil.rmtree(extract, ignore_errors=True)
 
 
+# Local tail is sparser than Drive's: each archive is about 1.8 GB on a 460 GB Mac, and the daily brain
+# snapshots (brain_preservation) already cover the last few days a second time.
+ROTA_DAILY, ROTA_WEEKLY, ROTA_MONTHLY = 5, 3, 6
+
+
 def apply_rota(now: datetime | None = None) -> dict[str, Any]:
-    """Grandfather-father-son retention on the LOCAL archives: keep the newest 7 DAILY, 4 WEEKLY (one
-    per ISO week), 12 MONTHLY (one per calendar month). Older/redundant archives are deleted. Returns
-    what was kept and deleted. This is the same scheme the Drive uploader mirrors."""
+    """Grandfather-father-son retention on the LOCAL archives: keep the newest ROTA_DAILY (5) DAILY,
+    ROTA_WEEKLY (3) WEEKLY (one per ISO week), ROTA_MONTHLY (6) MONTHLY (one per calendar month).
+    Older/redundant archives are deleted. Returns what was kept and deleted. Drive keeps its own,
+    longer tail (7 daily, 4 weekly, 12 monthly)."""
     now = now or _now()
     archives = sorted(_backup_root().glob("mongoose-backup-*.tar.gz"),
                       key=lambda p: _parse_stamp(p.name) or now, reverse=True)
@@ -286,16 +292,13 @@ def apply_rota(now: datetime | None = None) -> dict[str, Any]:
         day = dt.strftime("%Y-%m-%d")
         week = f"{dt.isocalendar().year}-W{dt.isocalendar().week:02d}"
         month = dt.strftime("%Y-%m")
-        # newest 7 distinct days
-        if len(seen_days) < 7 and day not in seen_days:
+        if len(seen_days) < ROTA_DAILY and day not in seen_days:
             seen_days.add(day)
             keep.add(p)
-        # newest 4 distinct weeks
-        if len(seen_weeks) < 4 and week not in seen_weeks:
+        if len(seen_weeks) < ROTA_WEEKLY and week not in seen_weeks:
             seen_weeks.add(week)
             keep.add(p)
-        # newest 12 distinct months
-        if len(seen_months) < 12 and month not in seen_months:
+        if len(seen_months) < ROTA_MONTHLY and month not in seen_months:
             seen_months.add(month)
             keep.add(p)
 
