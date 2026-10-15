@@ -640,6 +640,22 @@ async def _job_rtm_demand_prepare() -> dict[str, Any]:
     return await SD.run_prepare()
 
 
+async def _job_rtm_scheduled_letters() -> dict[str, Any]:
+    """Email any armed, due batch of scheduled letters (rtm_scheduled_letters), and tell the owner how it
+    went. No-op when nothing is due; each letter is sent at most once."""
+    import asyncio as _aio
+    from . import rtm_scheduled_letters as SL
+
+    def _notify(title: str, body: str) -> None:
+        try:
+            import asyncio as _a2
+            from .notifications import publish_ntfy
+            _a2.run(publish_ntfy(title, body, priority="high"))
+        except Exception:
+            pass
+    return await _aio.to_thread(SL.run_due, notify=_notify)
+
+
 async def _job_rtm_queue_sync() -> dict[str, Any]:
     """Drain the WordPress-queued director actions (mark-paid, membership changes, document requests),
     apply them into the ledger and republish if anything changed, so a director's portal click takes
@@ -1346,6 +1362,8 @@ def _build_registry() -> dict[str, tuple[tuple, JobFn]]:
             # Once a day, check whether a scheduled half-year demand run has reached its prepare-date; if
             # so, preview it and alert the owner to confirm. No-op on every other day.
             reg["rtm_demand_prepare"] = (("daily", getattr(s, "rtm_demand_prepare_hour", 8), getattr(s, "rtm_demand_prepare_minute", 30)), _job_rtm_demand_prepare)
+            # Scheduled letters (e.g. notices emailed at 9am): checked every minute, sends only armed batches.
+            reg["rtm_scheduled_letters"] = (("interval", 1), _job_rtm_scheduled_letters)
     except Exception:
         pass
     # post mongoose's version-handshake to peers the moment the connection opens (fires only on the

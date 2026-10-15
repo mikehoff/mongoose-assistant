@@ -13,8 +13,8 @@ from mongoose.services import rtm_portal as P
 def wp(monkeypatch, tmp_path):
     calls = []
     replies = {"/wp-json/example-court/v1/sync/demand-pdf": {"ok": True},
-               "/wp-json/example-court/v1/portal/send-letter": {"ok": True, "sent": True, "email": "lh@example.com",
-                                                                "attached": 1}}
+               "/wp-json/example-court/v1/portal/send-letter": {"ok": True, "data": {"ok": True, "sent": True,
+                                                                "email": "lh@example.com", "attached": 1}}}
 
     def fake(method, path, json_body=None, timeout=0):
         calls.append((path, json_body))
@@ -37,7 +37,7 @@ def test_a_real_send_needs_confirmation(wp):
 def test_test_send_goes_nowhere_but_the_rtm_and_copies_nobody(wp):
     calls, _, pdf = wp
     r = P.send_attached_letter("1ECF3", str(pdf), subject="Notice", document_number="LETTER/X", test=True)
-    assert r["ok"] and r["test"]
+    assert r["ok"] and r["test"] and r["attached"] == 1 and r["email"] == "lh@example.com"
     push, send = calls
     assert push[1]["flat_id"] == "1ECF3" and push[1]["pdf_key"] == send[1]["pdf_key"]
     assert send[1]["test"] is True and send[1]["cc"] == "" and send[1]["signoff"] is False
@@ -53,9 +53,16 @@ def test_confirmed_send_copies_the_usual_parties(wp):
     assert calls[1][1]["attachment_name"] == "Notice_of_subletting_1ECF3.pdf"
 
 
+def test_test_send_without_attachment_is_also_a_failure(wp):
+    calls, replies, pdf = wp
+    replies["/wp-json/example-court/v1/portal/send-letter"] = {"ok": True, "data": {"ok": True, "sent": True}}
+    assert not P.send_attached_letter("1ECF3", str(pdf), subject="N", document_number="L", test=True)["ok"]
+
+
 def test_old_plugin_sending_without_the_attachment_is_a_failure(wp):
     calls, replies, pdf = wp
-    replies["/wp-json/example-court/v1/portal/send-letter"] = {"ok": True, "sent": True, "email": "lh@example.com"}
+    replies["/wp-json/example-court/v1/portal/send-letter"] = {"ok": True, "data": {"ok": True, "sent": True,
+                                                                                "email": "lh@example.com"}}
     r = P.send_attached_letter("1ECF3", str(pdf), subject="Notice", document_number="LETTER/X", confirm=True)
     assert not r["ok"] and "WITHOUT the attachment" in r["error"]
 
